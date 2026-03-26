@@ -1,0 +1,16 @@
+.vscode/
+benchmark/
+build/
+unstructured/
+data/stats.csv
+data/covariance.csv
+main_hybrid.cpp
+monte_carlo_optimization.pdf
+output.txt
+report.odt
+
+# Ignore build artifacts
+*.o
+*.out
+*.exe
+*.log
