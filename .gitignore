@@ -2,6 +2,7 @@
 benchmark/
 build/
 unstructured/
+UCS645_ProjectReport_Template/
 data/stats.csv
 data/covariance.csv
 main_hybrid.cpp

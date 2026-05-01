@@ -4,14 +4,54 @@
 #include <cmath>
 #include <fstream>
 #include <iostream>
+#include <random>
 #include <stdexcept>
 #include <vector>
+#include <algorithm>
 
 #ifdef _OPENMP
 #include <omp.h>
 #endif
 
 using namespace std;
+
+static bool choleskyDecompose(const vector<vector<double>>& A, vector<vector<double>>& L)
+{
+    int n = static_cast<int>(A.size());
+    L.assign(n, vector<double>(n, 0.0));
+
+    for (int i = 0; i < n; i++)
+    {
+        for (int j = 0; j <= i; j++)
+        {
+            double s = 0.0;
+            for (int k = 0; k < j; k++)
+            {
+                s += L[i][k] * L[j][k];
+            }
+
+            if (i == j)
+            {
+                double diag = A[i][i] - s;
+                if (diag <= 0.0)
+                {
+                    return false;
+                }
+                L[i][j] = sqrt(diag);
+            }
+            else
+            {
+                if (L[j][j] <= 0.0)
+                {
+                    return false;
+                }
+                L[i][j] = (A[i][j] - s) / L[j][j];
+            }
+        }
+    }
+
+    return true;
+}
 
 void computeStats(const string &priceFile, const string &statsFile, const string &covFile)
 {
@@ -165,4 +205,99 @@ void computeStats(const string &priceFile, const string &statsFile, const string
 
     // cout << "Mean, risk, and covariance computed\n";
     cout << "Saved " << statsFile << " and " << covFile << "\n";
+}
+
+double checkCovarianceStability(
+    const vector<vector<double>>& cov_input,
+    int N,
+    int J,
+    unsigned int seed)
+{
+    if (N <= 0 || J <= 1)
+    {
+        throw runtime_error("Invalid N or J in checkCovarianceStability");
+    }
+
+    vector<vector<double>> stabilized = cov_input;
+    vector<vector<double>> L;
+
+    bool ok = choleskyDecompose(stabilized, L);
+    if (!ok)
+    {
+        double jitter = 1e-10;
+        for (int attempt = 0; attempt < 8 && !ok; attempt++)
+        {
+            for (int i = 0; i < N; i++)
+            {
+                stabilized[i][i] += jitter;
+            }
+            ok = choleskyDecompose(stabilized, L);
+            jitter *= 10.0;
+        }
+    }
+
+    if (!ok)
+    {
+        throw runtime_error("Covariance matrix is not positive definite even after jitter");
+    }
+
+    mt19937 rng(seed);
+    normal_distribution<double> ndist(0.0, 1.0);
+
+    vector<vector<double>> samples(J, vector<double>(N, 0.0));
+    for (int t = 0; t < J; t++)
+    {
+        vector<double> z(N, 0.0);
+        for (int i = 0; i < N; i++)
+        {
+            z[i] = ndist(rng);
+        }
+
+        for (int i = 0; i < N; i++)
+        {
+            double v = 0.0;
+            for (int k = 0; k <= i; k++)
+            {
+                v += L[i][k] * z[k];
+            }
+            samples[t][i] = v;
+        }
+    }
+
+    vector<double> mean(N, 0.0);
+    for (int i = 0; i < N; i++)
+    {
+        double s = 0.0;
+        for (int t = 0; t < J; t++)
+        {
+            s += samples[t][i];
+        }
+        mean[i] = s / static_cast<double>(J);
+    }
+
+    vector<vector<double>> realized(N, vector<double>(N, 0.0));
+    for (int i = 0; i < N; i++)
+    {
+        for (int j = 0; j < N; j++)
+        {
+            double s = 0.0;
+            for (int t = 0; t < J; t++)
+            {
+                s += (samples[t][i] - mean[i]) * (samples[t][j] - mean[j]);
+            }
+            realized[i][j] = s / static_cast<double>(J - 1);
+        }
+    }
+
+    double delta = 0.0;
+    for (int i = 0; i < N; i++)
+    {
+        for (int j = 0; j < N; j++)
+        {
+            double d = fabs(realized[i][j] - cov_input[i][j]);
+            delta = max(delta, d);
+        }
+    }
+
+    return delta;
 }

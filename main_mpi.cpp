@@ -3,6 +3,7 @@
 #include "montecarlo.h"
 #include "data_loader.h"
 #include "portfolio.h"
+#include "stats.h"
 
 #include <iostream>
 #include <vector>
@@ -38,6 +39,15 @@ int main(int argc, char **argv)
             cov);
 
         m = mean.size();
+
+        double delta_1k = checkCovarianceStability(cov, m, 1000);
+        double delta_10k = checkCovarianceStability(cov, m, 10000);
+        double delta_100k = checkCovarianceStability(cov, m, 100000);
+
+        cout << "Covariance stability check:\n";
+        cout << "  J=1,000   delta=" << delta_1k << (delta_1k > 0.1 ? "  [UNSTABLE]" : "  [ok]") << "\n";
+        cout << "  J=10,000  delta=" << delta_10k << (delta_10k > 0.02 ? "  [marginal]" : "  [ok]") << "\n";
+        cout << "  J=100,000 delta=" << delta_100k << (delta_100k > 0.02 ? "  [marginal]" : "  [ok]") << "\n";
     }
 
     // broadcast m to all processes
@@ -58,9 +68,10 @@ int main(int argc, char **argv)
 
     int N = 10000000; //10 million iterations across all processes
     int localN = N / size; //Iterations per process
+    int bias_power = rank % 6;
 
     vector<double> localW(m);
-    double localBest = runMonteCarloLocal(localN, mean, cov, localW);
+    double localBest = runMonteCarloLocal(localN, mean, cov, localW, bias_power);
 
     //gather sharpe ratios to root process
     double globalBestSharpe;
@@ -101,6 +112,7 @@ int main(int argc, char **argv)
         cout << left << setw(25) << "Best Sharpe:" << setw(12) << globalBestSharpe << "\n";
         cout << left << setw(25) << "Best Return:" << setw(12) << bestReturn << "\n";
         cout << left << setw(25) << "Best Risk:" << setw(12) << bestRisk << "\n";
+        cout << left << setw(25) << "Winning bias_power:" << setw(12) << (bestIdx % 6) << "\n";
     }
 
     MPI_Finalize();

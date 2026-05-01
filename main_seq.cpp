@@ -26,8 +26,8 @@ int main()
     loadStatsAndCovariance(statsFile, covFile, symbols, mean, cov);
 
     // 3) Run sequential Monte Carlo
-    int iterations = 10000000; //10 million iterations
-    // int iterations = 1000000; //1 million iterations
+    //int iterations = 10000000; //10 million iterations
+     int iterations = 1000000; //1 million iterations
 
     runMonteCarlo(iterations, mean, cov);
     auto end = chrono::high_resolution_clock::now();
